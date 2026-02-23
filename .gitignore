@@ -1,0 +1,69 @@
+# ===============================
+# Node.js
+# ===============================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Package lock files (opcional)
+package-lock.json
+yarn.lock
+
+# ===============================
+# Environment Variables
+# ===============================
+.env
+.env.*
+!.env.example
+
+# ===============================
+# Build / Output
+# ===============================
+dist/
+build/
+coverage/
+
+# ===============================
+# Logs
+# ===============================
+logs/
+*.log
+
+# ===============================
+# Prisma
+# ===============================
+node_modules/.prisma/
+prisma/dev.db
+prisma/dev.db-journal
+prisma/migrations/*.db
+
+# ===============================
+# OS Files
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# IDE
+# ===============================
+.vscode/
+.idea/
+
+# ===============================
+# Temporary files
+# ===============================
+*.tmp
+*.temp
+*.swp
+
+# ===============================
+# Windows Specific
+# ===============================
+desktop.ini
+
+# ===============================
+# Optional - uploads folder
+# ===============================
+uploads/

@@ -1,4 +1,6 @@
+// src/modules/whatsapp/whatsapp.inbox.service.js
 import { prisma } from '../../db/prisma.js'
+import { bus } from '../../realtime/bus.js'
 
 function plus24h(d) {
   return new Date(d.getTime() + 24 * 60 * 60 * 1000)
@@ -11,6 +13,8 @@ export async function ingestIncomingText({ fromWaId, providerMessageId, contactN
     select: { id: true },
   })
   if (exists) return null
+
+  const ts = createdAt ? new Date(createdAt) : new Date()
 
   // contact
   const contact = await prisma.contact.upsert({
@@ -31,8 +35,6 @@ export async function ingestIncomingText({ fromWaId, providerMessageId, contactN
     where: { contactId: contact.id, status: { in: ['OPEN', 'PENDING'] } },
     orderBy: { createdAt: 'desc' },
   })
-
-  const ts = createdAt ? new Date(createdAt) : new Date()
 
   if (!ticket) {
     ticket = await prisma.ticket.create({
@@ -59,9 +61,24 @@ export async function ingestIncomingText({ fromWaId, providerMessageId, contactN
   })
 
   // update ticket
-  await prisma.ticket.update({
+  const updatedTicket = await prisma.ticket.update({
     where: { id: ticket.id },
-    data: { lastMessageAt: ts, waWindowUntil: plus24h(ts), status: 'OPEN' },
+    data: {
+      lastMessageAt: ts,
+      waWindowUntil: plus24h(ts),
+      status: 'OPEN',
+    },
+    include: {
+      contact: true,
+      assignedTo: { select: { id: true, name: true, role: true } },
+    },
+  })
+
+  // ✅ Emite evento para o front (SSE)
+  bus.emit('message.created', {
+    source: 'webhook',
+    ticket: updatedTicket,
+    message: msg,
   })
 
   return msg

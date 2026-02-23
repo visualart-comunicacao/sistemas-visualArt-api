@@ -1,5 +1,7 @@
 import * as repo from './inbox.repository.js'
 import { sendTextMessage } from '../whatsapp/whatsapp.service.js'
+import { bus } from '../../realtime/bus.js'
+import { prisma } from '../../db/prisma.js'
 
 function isWithinWindow(waWindowUntil) {
   if (!waWindowUntil) return false
@@ -97,5 +99,20 @@ export async function sendMessage({ ticketId, actor, text }) {
   })
   await repo.bumpTicketLastMessage(ticketId)
 
+  const updatedTicket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: {
+      contact: true,
+      assignedTo: { select: { id: true, name: true, role: true } },
+    },
+  })
+
+  bus.emit('message.created', {
+    source: 'inbox.send',
+    ticket: updatedTicket,
+    message: msg,
+  })
+
   return msg
 }
+

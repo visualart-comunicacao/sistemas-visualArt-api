@@ -1,21 +1,23 @@
+// src/modules/whatsapp/whatsapp.routes.js
 import { Router } from 'express'
 import { postWebhook } from './whatsapp.controller.js'
-import { validate } from '../../middlewares/validate.js' // se você tiver esse validate
+import { validate } from '../../middlewares/validate.js'
 import { WhatsAppWebhookQuerySchema } from './whatsapp.schemas.js'
 import { verifyMetaWebhookChallenge, verifyMetaSignature } from './whatsapp.verify.js'
+import { env } from '../../config/env.js'
 
 export const router = Router()
 
-// GET /webhooks/whatsapp?hub.mode=...&hub.verify_token=...&hub.challenge=...
-router.get(
-  '/',
-  validate(WhatsAppWebhookQuerySchema), // se você não tiver validate, tire essa linha
-  verifyMetaWebhookChallenge,
-)
+router.get('/', validate(WhatsAppWebhookQuerySchema), verifyMetaWebhookChallenge)
 
 // POST /webhooks/whatsapp
 router.post(
   '/',
-  // verifyMetaSignature, // usa req.rawBody
-  postWebhook,         // usa req.body
+  // Em dev você consegue testar via Insomnia sem header;
+  // Em produção, valida assinatura da Meta.
+  (req, res, next) => {
+    if (env.NODE_ENV === 'development') return next()
+    return verifyMetaSignature(req, res, next)
+  },
+  postWebhook,
 )

@@ -1,6 +1,8 @@
 import { Router } from 'express'
-import { sseAuthRequired } from '../../middlewares/auth-sse.js'
+import { authSSE } from '../../middlewares/auth-sse.js'
 import { streamInbox } from './inbox.stream.controller.js'
 
 export const router = Router()
-router.get('/stream', sseAuthRequired, streamInbox)
+
+// ✅ SSE precisa aceitar query token
+router.get('/stream', authSSE, streamInbox)

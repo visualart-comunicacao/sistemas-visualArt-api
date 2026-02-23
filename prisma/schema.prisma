@@ -523,6 +523,8 @@ model Message {
   text     String?
   mediaUrl String?
   mimeType String?
+  durationMs Int?
+  sizeBytes Int?
 
   // id da mensagem na Meta (quando houver)
   providerMessageId String? @unique

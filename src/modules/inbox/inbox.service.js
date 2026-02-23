@@ -115,4 +115,35 @@ export async function sendMessage({ ticketId, actor, text }) {
 
   return msg
 }
+export async function createVoiceOutMessage({
+  ticketId,
+  userId,
+  mediaUrl,
+  mimeType,
+  sizeBytes,
+  durationMs,
+}) {
+  // opcional: valida ticket existe / permissão
+  const message = await prisma.message.create({
+    data: {
+      ticketId,
+      type: 'AUDIO',
+      direction: 'OUT',
+      mediaUrl,
+      mimeType,
+      sizeBytes,
+      durationMs,
+      // se você tem authorId/senderId:
+      // userId,
+    },
+  })
+
+  // SSE: mesmo padrão que você já usa pro realtime
+  bus.emit('message.created', {
+    ticketId,
+    message,
+  })
+
+  return message
+}
 

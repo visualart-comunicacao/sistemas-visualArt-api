@@ -1,4 +1,5 @@
 import * as service from './inbox.service.js'
+import { uploadVoice } from '../../middlewares/upload-voice.js'
 
 function parseIntSafe(v, fallback) {
   const n = Number.parseInt(String(v ?? ''), 10)
@@ -12,6 +13,42 @@ function normalizeQueue(raw) {
   if (q === 'todos') return 'todos'
   return 'meus'
 }
+
+export const sendVoiceMessage = [
+  uploadVoice.single('file'),
+  async (req, res, next) => {
+    try {
+      const { ticketId } = req.params
+      const userId = req.user?.id // conforme seu authRequired
+      const file = req.file
+
+      if (!file) {
+        return res.status(400).json({ message: 'Arquivo de áudio não enviado (field: file).' })
+      }
+
+      // URL pública do seu servidor
+      const mediaUrl = `/uploads/voices/${file.filename}`
+
+      // durationMs: por enquanto pode vir do front (mais confiável no “agora”)
+      const durationMs = Number.isFinite(Number(req.body?.durationMs))
+        ? Number(req.body.durationMs)
+        : null
+
+      const msg = await service.createVoiceOutMessage({
+        ticketId,
+        userId,
+        mediaUrl,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        durationMs,
+      })
+
+      return res.status(201).json(msg)
+    } catch (err) {
+      next(err)
+    }
+  }
+]
 
 export async function listTickets(req, res, next) {
   try {
@@ -60,12 +97,13 @@ export async function assignTicket(req, res, next) {
 
     const { ticketId } = req.params
     const { userId } = req.body || {}
+    const toUserId = userId ? String(userId) : String(req.user.id)
     if (!ticketId) return res.status(400).json({ message: 'ticketId é obrigatório.' })
 
     const ticket = await service.assignTicket({
       ticketId,
       actor: req.user,
-      toUserId: userId ? String(userId) : null,
+      toUserId,
     })
 
     return res.json({ ticket })

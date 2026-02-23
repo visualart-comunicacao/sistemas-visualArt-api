@@ -12,9 +12,7 @@ export const CategoriesController = {
 
   async create(req, res, next) {
     try {
-      console.log('entrei no create do controller');
       const created = await CategoriesService.create(req.validated.body);
-      console.log('Created category:', created);
       res.status(201).json(created);
     } catch (e) {
       next(e);

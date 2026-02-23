@@ -171,10 +171,19 @@ export async function sendTextMessage({ toWaId, text }) {
 
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    const msg = data?.error?.message || 'WhatsApp send failed'
-    const details = data?.error ? JSON.stringify(data.error) : ''
-    const err = new Error(`${msg} ${details}`.trim())
-    err.status = res.status
+    const upstreamStatus = res.status
+
+    const msg = data?.error?.message || 'WhatsApp API error'
+    const err = new Error(msg)
+
+    // Se for erro de auth do provedor (Graph/WhatsApp),
+    // NÃO repassar 401/403 como 401 pro seu ERP
+    if (upstreamStatus === 401 || upstreamStatus === 403) {
+      err.status = 502 // Bad Gateway (erro do provedor)
+    } else {
+      err.status = upstreamStatus
+    }
+
     err.details = data?.error || data
     throw err
   }

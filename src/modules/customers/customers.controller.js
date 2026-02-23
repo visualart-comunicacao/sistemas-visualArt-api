@@ -2,7 +2,6 @@ import { CustomersService } from './customers.service.js';
 
 export const CustomersController = {
   async register(req, res, next) {
-    console.log('entrei no controller');
     try {
       const result = await CustomersService.register(req.validated.body);
       res.status(201).json(result);

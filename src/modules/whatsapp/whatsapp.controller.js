@@ -72,8 +72,6 @@ export async function postWebhook(req, res, next) {
 
     const events = parseWebhookEvents(payload)
 
-    console.log('[WA WEBHOOK] events parsed:', events?.length || 0)
-
     // ✅ aqui você pode chamar seu service que salva no banco
     // por enquanto, só loga pra garantir que parou o 500
     for (const ev of events) {

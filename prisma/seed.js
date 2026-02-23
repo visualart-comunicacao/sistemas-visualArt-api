@@ -18,8 +18,6 @@ async function upsertAdmin() {
       role: 'ADMIN',
     },
   });
-
-  console.log(`✅ Admin criado: ${email} | senha: ${password}`);
 }
 
 async function upsertCategories() {
@@ -366,8 +364,6 @@ async function main() {
 
   if (banners) await createOrUpdateProductBanner(banners.id);
   if (adesivos) await createOrUpdateProductAdesivo(adesivos.id);
-
-  console.log('✅ Seed finalizado.');
 }
 
 main()

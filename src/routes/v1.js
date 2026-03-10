@@ -14,6 +14,7 @@ import { router as inboxStreamRouter } from '../modules/inbox/inbox.stream.route
 
 import { router as whatsappRouter } from '../modules/whatsapp/whatsapp.api.routes.js';
 import { router as adminRouter } from './admin.js';
+import { router as timeTrackingRouter } from '../modules/time-tracking/time-tracking.routes.js'
 
 export const router = Router();
 
@@ -26,6 +27,8 @@ router.use('/products', productsPublicRouter);
 router.use('/orders', ordersRouter);
 
 router.use('/whatsapp', whatsappRouter);
+
+router.use('/time-tracking', timeTrackingRouter)
 
 // ✅ MUITO IMPORTANTE: SSE ANTES do inboxRouter (porque inboxRouter tem router.use(authRequired))
 router.use('/inbox', inboxStreamRouter);

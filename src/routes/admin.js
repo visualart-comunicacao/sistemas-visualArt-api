@@ -6,6 +6,8 @@ import { router as productsAdminRouter } from '../modules/products/products.admi
 import { router as quotesAdminRouter } from '../modules/quotes/quotes.admin.routes.js';
 import { router as customersErpRouter } from '../modules/customers-erp/customers-erp.routes.js';
 import { router as uploadsAdminRouter } from '../modules/uploads/uploads.routes.js';
+import { router as usersRouter } from '../modules/users/users.routes.js';
+
 export const router = Router();
 
 router.use(authRequired);
@@ -16,3 +18,4 @@ router.use('/', productsAdminRouter); // /admin/products..., /admin/stock..., /a
 router.use('/', quotesAdminRouter);
 router.use('/', customersErpRouter);
 router.use('/', uploadsAdminRouter);
+router.use('/users', usersRouter)

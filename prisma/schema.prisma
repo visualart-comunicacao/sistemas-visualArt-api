@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   CUSTOMER
   ADMIN
+  EMPLOYEE
 }
 
 enum OrderStatus {
@@ -88,6 +89,15 @@ model User {
   addresses Address[]
   orders    Order[]
   profile   CustomerProfile?
+
+  employeeProfile EmployeeProfile?
+
+  timeEntries TimeEntry[]
+  workDays    WorkDay[]
+
+  adjustmentsCreated TimeAdjustment[] @relation("TimeAdjustmentCreatedBy")
+  approvalsDecided   TimeApproval[]   @relation("TimeApprovalDecidedBy")
+  approvals          TimeApproval[]   @relation("TimeApprovalUser")
 
   // ✅ WhatsApp Inbox (tickets atribuídos ao usuário/atendente)
   tickets Ticket[]
@@ -520,11 +530,11 @@ model Message {
   direction MessageDirection
   type      MessageType      @default(TEXT)
 
-  text     String?
-  mediaUrl String?
-  mimeType String?
+  text       String?
+  mediaUrl   String?
+  mimeType   String?
   durationMs Int?
-  sizeBytes Int?
+  sizeBytes  Int?
 
   // id da mensagem na Meta (quando houver)
   providerMessageId String? @unique
@@ -534,4 +544,179 @@ model Message {
   createdAt DateTime @default(now())
 
   @@index([ticketId, createdAt])
+}
+
+// ==============================
+// ✅ Time Tracking (ERP)
+// ==============================
+
+enum PunchType {
+  CLOCK_IN
+  CLOCK_OUT
+  BREAK_START
+  BREAK_END
+}
+
+enum WorkdayStatus {
+  OPEN
+  CLOSED
+  INCOMPLETE
+  ADJUSTED
+}
+
+enum AdjustmentType {
+  MANUAL_EDIT
+  FORGOT_PUNCH
+  MEDICAL
+  HOLIDAY
+  BUSINESS_TRIP
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum EmployeeRole {
+  EMPLOYEE
+  MANAGER
+  ADMIN
+}
+
+model EmployeeProfile {
+  id     String       @id @default(cuid())
+  userId String       @unique
+  code   String?      @unique
+  role   EmployeeRole @default(EMPLOYEE)
+  active Boolean      @default(true)
+
+  department String?
+  unit       String?
+
+  // relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TimePolicy {
+  id       String @id @default(cuid())
+  name     String
+  timezone String @default("America/Sao_Paulo")
+
+  entryTime         String // "07:40"
+  exitTime          String // "18:00"
+  lunchMinutes      Int // 90
+  extraBreakMinutes Int // 15
+
+  // ✅ recomendo guardar explicitamente o alvo diário
+  dailyTargetMinutes Int
+
+  toleranceMinutes Int      @default(0)
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+}
+
+model WorkShift {
+  id        String  @id @default(cuid())
+  name      String
+  startTime String // "07:40"
+  endTime   String // "18:00"
+  policyId  String?
+
+  createdAt DateTime @default(now())
+}
+
+model TimeEntry {
+  id        String    @id @default(cuid())
+  userId    String
+  type      PunchType
+  timestamp DateTime
+  deviceId  String?
+  meta      Json?
+
+  // relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, timestamp])
+}
+
+model WorkDay {
+  id     String        @id @default(cuid())
+  userId String
+  date   DateTime
+  status WorkdayStatus @default(OPEN)
+
+  firstInAt DateTime?
+  lastOutAt DateTime?
+
+  workedMs  Int @default(0)
+  breakMs   Int @default(0)
+  extraMs   Int @default(0)
+  missingMs Int @default(0)
+  lateMs    Int @default(0)
+
+  policyId String?
+  shiftId  String?
+
+  notes String?
+
+  // relations
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adjustments TimeAdjustment[]
+  approvals   TimeApproval[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date], name: "userId_date")
+  @@index([date])
+}
+
+model TimeAdjustment {
+  id        String         @id @default(cuid())
+  workDayId String
+  type      AdjustmentType
+  reason    String?
+  deltaMs   Int
+  meta      Json?
+
+  createdById String
+  createdBy   User   @relation("TimeAdjustmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  workDay WorkDay @relation(fields: [workDayId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([workDayId])
+  @@index([createdById])
+}
+
+model TimeApproval {
+  id          String         @id @default(cuid())
+  userId      String
+  periodStart DateTime
+  periodEnd   DateTime
+  status      ApprovalStatus @default(PENDING)
+
+  decidedById String?
+  decidedBy   User?   @relation("TimeApprovalDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  decidedAt DateTime?
+  comment   String?
+
+  // relations
+  user User @relation("TimeApprovalUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  WorkDay   WorkDay? @relation(fields: [workDayId], references: [id])
+  workDayId String?
+
+  @@index([userId, periodStart, periodEnd])
+  @@index([status])
 }

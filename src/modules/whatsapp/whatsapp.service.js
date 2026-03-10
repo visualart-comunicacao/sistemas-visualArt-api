@@ -1,5 +1,7 @@
 // src/modules/whatsapp/whatsapp.service.js
 import { prisma } from '../../db/prisma.js'
+import fs from 'node:fs'
+import FormData from 'form-data'
 
 const GRAPH_BASE = 'https://graph.facebook.com'
 
@@ -242,6 +244,80 @@ export async function sendTemplateMessage({ toWaId, templateName, languageCode =
     const details = data?.error ? JSON.stringify(data.error) : ''
     const err = new Error(`${msg} ${details}`.trim())
     err.status = res.status
+    err.details = data?.error || data
+    throw err
+  }
+
+  const messageId = data?.messages?.[0]?.id ?? null
+  return { messageId, raw: data }
+}
+
+export async function uploadMedia({ filePath, mimeType, fileName }) {
+  const accessToken = assertEnv('WHATSAPP_ACCESS_TOKEN')
+  const phoneNumberId = assertEnv('WHATSAPP_PHONE_NUMBER_ID')
+
+  const url = `${GRAPH_BASE}/${getGraphVersion()}/${phoneNumberId}/media`
+
+  const form = new FormData()
+  form.append('messaging_product', 'whatsapp')
+  form.append('file', fs.createReadStream(filePath), {
+    filename: fileName || 'audio',
+    contentType: mimeType,
+  })
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...form.getHeaders(),
+    },
+    body: form,
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const msg = data?.error?.message || 'WhatsApp media upload failed'
+    const err = new Error(msg)
+    err.status = res.status === 401 || res.status === 403 ? 502 : res.status
+    err.details = data?.error || data
+    throw err
+  }
+
+  return {
+    mediaId: data?.id ?? null,
+    raw: data,
+  }
+}
+
+export async function sendAudioMessage({ toWaId, mediaId }) {
+  const accessToken = assertEnv('WHATSAPP_ACCESS_TOKEN')
+  const phoneNumberId = assertEnv('WHATSAPP_PHONE_NUMBER_ID')
+
+  const url = `${GRAPH_BASE}/${getGraphVersion()}/${phoneNumberId}/messages`
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: toWaId,
+      type: 'audio',
+      audio: {
+        id: mediaId,
+      },
+    }),
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    const msg = data?.error?.message || 'WhatsApp audio send failed'
+    const err = new Error(msg)
+    err.status = res.status === 401 || res.status === 403 ? 502 : res.status
     err.details = data?.error || data
     throw err
   }

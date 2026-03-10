@@ -49,6 +49,8 @@ export const AuthService = {
   },
 
   async login({ email, password }) {
+    console.log('user encontrado:', user);
+console.log('role do user:', user?.role);
     const user = await AuthRepository.getUserByEmail(email);
     if (!user) throw unauthorized();
 

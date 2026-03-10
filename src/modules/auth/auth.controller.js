@@ -2,6 +2,7 @@ import { AuthService } from './auth.service.js';
 
 export const AuthController = {
   async register(req, res, next) {
+    console.log('entrei aqui')
     try {
       const result = await AuthService.register(req.validated.body);
       res.status(201).json(result);

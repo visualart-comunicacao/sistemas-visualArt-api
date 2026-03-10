@@ -4,15 +4,17 @@ import {
   UpdateUserSchema,
   UpdateUserStatusSchema,
 } from './users.schemas.js';
+
 import { UsersService } from './users.service.js';
 
 export const UsersController = {
   async list(req, res, next) {
     try {
-      const parsed = LocationistUsersQuerySchema.parse(req.query);
+      console.log('Query params:', req.query);
+      const parsed = ListUsersQuerySchema.parse(req.query);
 
-      const skip = Number(req.query.skip ?? 0);
-      const take = Number(req.query.take ?? 20);
+      const skip = Number(parsed.skip ?? 0);
+      const take = Number(parsed.take ?? 20);
 
       const result = await UsersService.list({
         ...parsed,
@@ -38,7 +40,9 @@ export const UsersController = {
   async create(req, res, next) {
     try {
       const parsed = CreateUserSchema.parse(req.body);
+
       const result = await UsersService.create(parsed);
+
       res.status(201).json(result);
     } catch (err) {
       next(err);
@@ -48,7 +52,9 @@ export const UsersController = {
   async update(req, res, next) {
     try {
       const parsed = UpdateUserSchema.parse(req.body);
+
       const result = await UsersService.update(req.params.id, parsed);
+
       res.json(result);
     } catch (err) {
       next(err);
@@ -58,7 +64,12 @@ export const UsersController = {
   async setStatus(req, res, next) {
     try {
       const parsed = UpdateUserStatusSchema.parse(req.body);
-      const result = await UsersService.setActive(req.params.id, parsed.isActive);
+
+      const result = await UsersService.setActive(
+        req.params.id,
+        parsed.isActive
+      );
+
       res.json(result);
     } catch (err) {
       next(err);

@@ -1,17 +1,14 @@
 import { z } from 'zod';
 
 export const ListUsersQuerySchema = z.object({
-  q: z.string().optional(),
+  search: z.string().optional(),
   role: z.enum(['ADMIN', 'EMPLOYEE']).optional(),
   isActive: z
-    .union([z.string(), z.boolean()])
-    .optional()
-    .transform((v) => {
-      if (v === undefined) return undefined;
-      if (v === true || v === 'true') return true;
-      if (v === false || v === 'false') return false;
-      return undefined;
-    }),
+    .union([z.literal('true'), z.literal('false')])
+    .transform((v) => v === 'true')
+    .optional(),
+  skip: z.coerce.number().int().min(0).optional().default(0),
+  take: z.coerce.number().int().min(1).max(100).optional().default(20),
 });
 
 export const GetUserByIdSchema = z.object({

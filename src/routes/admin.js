@@ -18,4 +18,4 @@ router.use('/', productsAdminRouter); // /admin/products..., /admin/stock..., /a
 router.use('/', quotesAdminRouter);
 router.use('/', customersErpRouter);
 router.use('/', uploadsAdminRouter);
-router.use('/users', usersRouter)
+router.use('/', usersRouter)

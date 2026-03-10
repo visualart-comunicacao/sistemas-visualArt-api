@@ -15,4 +15,4 @@ router.get('/users', validate(ListUsersQuerySchema), UsersController.list);
 router.get('/users/:id', validate(GetUserByIdSchema), UsersController.getById);
 router.post('/users', validate(CreateUserSchema), UsersController.create);
 router.put('/users/:id', validate(UpdateUserSchema), UsersController.update);
-router.patch('/users/:id/status', validate(UpdateUserStatusSchema), UsersController.setStatus);
+router.patch('/users/:id/sstatus', validate(UpdateUserStatusSchema), UsersController.setStatus);

@@ -8,7 +8,7 @@ import { env } from '../../config/env.js'
 
 export const router = Router()
 
-router.get('/', validate(WhatsAppWebhookQuerySchema), verifyMetaWebhookChallenge)
+router.get('/', verifyMetaWebhookChallenge)
 
 // POST /webhooks/whatsapp
 router.post(

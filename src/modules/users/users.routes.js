@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { validate } from '../../middlewares/validate.js';
+import { validate, validateBody } from '../../middlewares/validate.js';
 import { UsersController } from './users.controller.js';
 import {
   ListUsersQuerySchema,
@@ -13,6 +13,6 @@ export const router = Router();
 
 router.get('/users', validate(ListUsersQuerySchema), UsersController.list);
 router.get('/users/:id', validate(GetUserByIdSchema), UsersController.getById);
-router.post('/users', validate(CreateUserSchema), UsersController.create);
-router.put('/users/:id', validate(UpdateUserSchema), UsersController.update);
-router.patch('/users/:id/sstatus', validate(UpdateUserStatusSchema), UsersController.setStatus);
+router.post('/users', validateBody(CreateUserSchema), UsersController.create);
+router.put('/users/:id', validateBody(UpdateUserSchema), UsersController.update);
+router.patch('/users/:id/status', validateBody(UpdateUserStatusSchema), UsersController.setStatus);

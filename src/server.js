@@ -9,8 +9,8 @@ async function main() {
   await prisma.$connect();
   logger.info('Connected to PostgreSQL via Prisma');
 
-  app.listen(env.PORT, () => {
-    logger.info(`API running on http://localhost:${env.PORT}`);
+  app.listen(env.PORT, '0.0.0.0', () => {
+    logger.info(`API running on port ${env.PORT}`);
   });
 }
 

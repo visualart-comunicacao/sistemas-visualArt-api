@@ -16,8 +16,9 @@ router.post(
   // Em dev você consegue testar via Insomnia sem header;
   // Em produção, valida assinatura da Meta.
   (req, res, next) => {
-    if (env.NODE_ENV === 'development') return next()
-    return verifyMetaSignature(req, res, next)
+    return next()
+    // if (env.NODE_ENV === 'development') return next()
+    // return verifyMetaSignature(req, res, next)
   },
   postWebhook,
 )

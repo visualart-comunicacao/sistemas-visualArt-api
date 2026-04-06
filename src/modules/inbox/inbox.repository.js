@@ -95,7 +95,15 @@ export async function closeTicket(ticketId) {
   })
 }
 
-export async function createOutboundMessage({ ticketId, text, providerMessageId, status = 'SENT' }) {
+export async function createOutboundMessage({
+  ticketId,
+  text,
+  providerMessageId,
+  status,
+  senderType,
+  senderUserId,
+  senderName,
+}) {
   return prisma.message.create({
     data: {
       ticketId,
@@ -104,6 +112,9 @@ export async function createOutboundMessage({ ticketId, text, providerMessageId,
       text,
       providerMessageId,
       status,
+      senderType: senderType ?? 'AGENT',
+      senderUserId: senderUserId ?? null,
+      senderName: senderName ?? null,
     },
   })
 }

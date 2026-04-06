@@ -88,6 +88,9 @@ export async function storeOutboundMessageSent({
   mediaUrl,
   mimeType,
   createdAt,
+  senderType,
+  senderUserId,
+  senderName,
 }) {
   return prisma.message.create({
     data: {
@@ -100,6 +103,9 @@ export async function storeOutboundMessageSent({
       providerMessageId: providerMessageId ?? null,
       status: 'SENT',
       createdAt: createdAt ?? new Date(),
+      senderType: senderType ?? 'AGENT',
+      senderUserId: senderUserId ?? null,
+      senderName: senderName ?? null,
     },
   })
 }
@@ -111,6 +117,9 @@ export async function storeOutboundMessageFailed({
   mediaUrl,
   mimeType,
   createdAt,
+  senderType,
+  senderUserId,
+  senderName,
 }) {
   return prisma.message.create({
     data: {
@@ -123,6 +132,9 @@ export async function storeOutboundMessageFailed({
       providerMessageId: null,
       status: 'FAILED',
       createdAt: createdAt ?? new Date(),
+      senderType: senderType ?? 'AGENT',
+      senderUserId: senderUserId ?? null,
+      senderName: senderName ?? null,
     },
   })
 }
@@ -288,6 +300,17 @@ export async function uploadMedia({ filePath, mimeType, fileName }) {
     mediaId: data?.id ?? null,
     raw: data,
   }
+}
+
+export async function markTicketLastOutboundBy(ticketId, user) {
+  return prisma.ticket.update({
+    where: { id: ticketId },
+    data: {
+      lastOutboundById: user?.id ?? null,
+      ...(user?.id ? { assignedToId: user.id } : {}),
+      ...(user?.id ? { claimedAt: new Date() } : {}),
+    },
+  })
 }
 
 export async function sendAudioMessage({ toWaId, mediaId }) {

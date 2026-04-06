@@ -9,6 +9,7 @@ import {
   sendTextMessage,
   getMediaUrl,
   updateMessageStatus,
+  markTicketLastOutboundBy,
   sendTemplateMessage
 } from './whatsapp.service.js'
 import { ingestIncomingText } from './whatsapp.inbox.service.js'
@@ -31,6 +32,8 @@ export async function postSendTextByPhone(req, res, next) {
     const { messageId, raw } = await sendTextMessage({ toWaId, text });
 
     // 4) salva OUT
+    const currentUser = req.user || req.authUser || null
+
     const msg = await storeOutboundMessageSent({
       ticketId: ticket.id,
       providerMessageId: messageId,
@@ -39,10 +42,17 @@ export async function postSendTextByPhone(req, res, next) {
       mediaUrl: null,
       mimeType: null,
       createdAt: new Date(),
-    });
+      senderType: 'AGENT',
+      senderUserId: currentUser?.id ?? null,
+      senderName: currentUser?.name ?? null,
+    })
+
+    if (currentUser?.id) {
+  await markTicketLastOutboundBy(ticket.id, currentUser)
+}
 
     // 5) atualiza janela
-    await bumpTicketWindow(ticket.id);
+    await bumpTicketWindow(ticket.id)
 
     return res.json({
       ok: true,
@@ -111,6 +121,8 @@ export async function postSendText(req, res, next) {
     const ticket = await findOrCreateOpenTicket(contactId)
     const { messageId } = await sendTextMessage({ toWaId, text })
 
+    const currentUser = req.user || req.authUser || null
+
     await storeOutboundMessageSent({
       ticketId: ticket.id,
       providerMessageId: messageId,
@@ -119,6 +131,9 @@ export async function postSendText(req, res, next) {
       mediaUrl: null,
       mimeType: null,
       createdAt: new Date(),
+      senderType: 'AGENT',
+      senderUserId: currentUser?.id ?? null,
+      senderName: currentUser?.name ?? null,
     })
 
     return res.json({ ok: true, ticketId: ticket.id, messageId })
@@ -150,15 +165,24 @@ export async function postSendTemplateByPhone(req, res, next) {
     })
 
     // 4) salva OUT
-    const msg = await storeOutboundMessageSent({
-      ticketId: ticket.id,
-      providerMessageId: messageId,
-      type: 'TEXT', // template ainda é uma mensagem "texto" para o nosso chat
-      text: `[TEMPLATE:${templateName}]`,
-      mediaUrl: null,
-      mimeType: null,
-      createdAt: new Date(),
-    })
+    const currentUser = req.user || req.authUser || null
+
+const msg = await storeOutboundMessageSent({
+  ticketId: ticket.id,
+  providerMessageId: messageId,
+  type: 'TEXT',
+  text: `[TEMPLATE:${templateName}]`,
+  mediaUrl: null,
+  mimeType: null,
+  createdAt: new Date(),
+  senderType: 'AGENT',
+  senderUserId: currentUser?.id ?? null,
+  senderName: currentUser?.name ?? null,
+})
+
+if (currentUser?.id) {
+  await markTicketLastOutboundBy(ticket.id, currentUser)
+}
 
     // 5) bump janela
     await bumpTicketWindow(ticket.id)

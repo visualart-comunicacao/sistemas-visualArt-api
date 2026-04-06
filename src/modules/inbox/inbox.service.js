@@ -92,12 +92,24 @@ export async function sendMessage({ ticketId, actor, text }) {
 
   // salvar OUT
   const msg = await repo.createOutboundMessage({
-    ticketId,
-    text: text.trim(),
-    providerMessageId: messageId,
-    status: 'SENT',
-  })
+  ticketId,
+  text: text.trim(),
+  providerMessageId: messageId,
+  status: 'SENT',
+  senderType: 'AGENT',
+  senderUserId: actor.id,
+  senderName: actor.name,
+}) 
+
   await repo.bumpTicketLastMessage(ticketId)
+
+  await prisma.ticket.update({
+  where: { id: ticketId },
+  data: {
+    lastOutboundById: actor.id,
+    ...(ticket.assignedToId ? {} : { assignedToId: actor.id, claimedAt: new Date() }),
+  },
+})
 
   const updatedTicket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -118,12 +130,12 @@ export async function sendMessage({ ticketId, actor, text }) {
 export async function createVoiceOutMessage({
   ticketId,
   userId,
+  userName,
   mediaUrl,
   mimeType,
   sizeBytes,
   durationMs,
 }) {
-  // opcional: valida ticket existe / permissão
   const message = await prisma.message.create({
     data: {
       ticketId,
@@ -133,12 +145,13 @@ export async function createVoiceOutMessage({
       mimeType,
       sizeBytes,
       durationMs,
-      // se você tem authorId/senderId:
-      // userId,
+      senderType: 'AGENT',
+      senderUserId: userId ?? null,
+      senderName: userName ?? null,
+      status: 'SENT',
     },
   })
 
-  // SSE: mesmo padrão que você já usa pro realtime
   bus.emit('message.created', {
     ticketId,
     message,
@@ -146,4 +159,3 @@ export async function createVoiceOutMessage({
 
   return message
 }
-

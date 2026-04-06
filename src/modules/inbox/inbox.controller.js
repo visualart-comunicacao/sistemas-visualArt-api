@@ -37,6 +37,7 @@ export const sendVoiceMessage = [
       const msg = await service.createVoiceOutMessage({
         ticketId,
         userId,
+        userName: req.user?.name ?? null,
         mediaUrl,
         mimeType: file.mimetype,
         sizeBytes: file.size,

@@ -48,17 +48,20 @@ export async function ingestIncomingText({ fromWaId, providerMessageId, contactN
   }
 
   // message IN
-  const msg = await prisma.message.create({
-    data: {
-      ticketId: ticket.id,
-      direction: 'IN',
-      type: 'TEXT',
-      text: text || null,
-      providerMessageId,
-      status: 'RECEIVED',
-      createdAt: ts,
-    },
-  })
+const msg = await prisma.message.create({
+  data: {
+    ticketId: ticket.id,
+    direction: 'IN',
+    type: 'TEXT',
+    text: text || null,
+    providerMessageId,
+    status: 'RECEIVED',
+    createdAt: ts,
+    senderType: 'CUSTOMER',
+    senderUserId: null,
+    senderName: contactName || contact.name || null,
+  },
+})
 
   // update ticket
   const updatedTicket = await prisma.ticket.update({

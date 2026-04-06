@@ -99,8 +99,10 @@ model User {
   approvalsDecided   TimeApproval[]   @relation("TimeApprovalDecidedBy")
   approvals          TimeApproval[]   @relation("TimeApprovalUser")
 
-  // ✅ WhatsApp Inbox (tickets atribuídos ao usuário/atendente)
-  tickets Ticket[]
+  // ✅ RELAÇÕES CORRETAS DO CHAT
+  ticketsAssigned     Ticket[]  @relation("TicketAssignedTo")
+  ticketsLastOutbound Ticket[]  @relation("TicketLastOutboundBy")
+  sentMessages        Message[] @relation("MessageSenderUser")
 
   @@index([role])
   @@index([isErpOnly])
@@ -505,12 +507,16 @@ model Ticket {
   contactId String
   contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
 
-  // ✅ Atendente responsável (se null => fila "Espera")
   assignedToId String?
-  assignedTo   User?   @relation(fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedTo   User?   @relation("TicketAssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   lastMessageAt DateTime?
   waWindowUntil DateTime?
+
+  lastOutboundById String?
+  lastOutboundBy   User?   @relation("TicketLastOutboundBy", fields: [lastOutboundById], references: [id], onDelete: SetNull)
+
+  claimedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -536,14 +542,25 @@ model Message {
   durationMs Int?
   sizeBytes  Int?
 
-  // id da mensagem na Meta (quando houver)
   providerMessageId String? @unique
 
   status MessageStatus @default(RECEIVED)
 
+  senderType   MessageSenderType?
+  senderUserId String?
+  senderUser   User?              @relation("MessageSenderUser", fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderName   String?
+
   createdAt DateTime @default(now())
 
   @@index([ticketId, createdAt])
+  @@index([senderUserId])
+}
+
+enum MessageSenderType {
+  CUSTOMER
+  AGENT
+  SYSTEM
 }
 
 // ==============================

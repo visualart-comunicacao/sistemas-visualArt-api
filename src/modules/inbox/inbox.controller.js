@@ -150,3 +150,12 @@ export async function sendMessage(req, res, next) {
     next(err)
   }
 }
+
+export async function listAgents(req, res, next) {
+  try {
+    const items = await service.listAgents()
+    return res.json({ items })
+  } catch (err) {
+    next(err)
+  }
+}

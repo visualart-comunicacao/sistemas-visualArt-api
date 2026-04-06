@@ -79,6 +79,7 @@ model User {
 
   isActive  Boolean @default(true)
   isErpOnly Boolean @default(false)
+  isChatAgent Boolean @default(false)
 
   phone    String?
   document String? @unique

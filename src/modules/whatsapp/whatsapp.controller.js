@@ -74,9 +74,6 @@ export async function postWebhook(req, res, next) {
   try {
     const payload = req.body
 
-    console.log('🔥 WEBHOOK RECEBIDO')
-    console.log(JSON.stringify(payload, null, 2))
-
     if (!payload || typeof payload !== 'object') {
       console.warn('[WA WEBHOOK] req.body inválido (não parseado). content-type:', req.headers['content-type'])
       console.warn('[WA WEBHOOK] body:', payload)

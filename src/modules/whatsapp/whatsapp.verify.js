@@ -7,13 +7,6 @@ export function verifyMetaWebhookChallenge(req, res) {
   const token = req.query['hub.verify_token']
   const challenge = req.query['hub.challenge']
 
-  console.log('WEBHOOK_VERIFY', {
-    mode,
-    token,
-    expected: env.WHATSAPP_VERIFY_TOKEN,
-    challenge,
-  })
-
   if (mode === 'subscribe' && token === env.WHATSAPP_VERIFY_TOKEN) {
     return res.status(200).send(String(challenge))
   }

@@ -21,7 +21,6 @@ export function validate(schema) {
 
 export function validateBody(schema) {
   return (req, _res, next) => {
-    console.log('entrei aqui')
     const result = schema.safeParse(req.body);
 
     if (!result.success) {

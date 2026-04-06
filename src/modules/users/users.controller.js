@@ -10,7 +10,6 @@ import { UsersService } from './users.service.js';
 export const UsersController = {
   async list(req, res, next) {
     try {
-      console.log('Query params:', req.query);
       const parsed = ListUsersQuerySchema.parse(req.query);
 
       const skip = Number(parsed.skip ?? 0);

@@ -5,7 +5,8 @@ import {
   assignTicket,
   closeTicket,
   sendMessage,
-  sendVoiceMessage
+  sendVoiceMessage,
+  listAgents
 } from './inbox.controller.js'
 import { updateContact } from './contacts.controller.js'
 import { authRequired } from '../../middlewares/auth.js'
@@ -21,3 +22,4 @@ router.patch('/tickets/:ticketId/close', closeTicket)
 router.post('/tickets/:ticketId/messages', sendMessage)
 router.patch('/contacts/:contactId', updateContact)
 router.post('/tickets/:ticketId/voice', sendVoiceMessage)
+router.get('/agents', listAgents)

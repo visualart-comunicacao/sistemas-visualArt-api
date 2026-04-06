@@ -33,8 +33,6 @@ export async function assignTicket({ ticketId, actor, toUserId }) {
   const isAdmin = actor.role === 'ADMIN'
   const targetId = toUserId ?? actor.id
 
-  // regra: atendente comum só pode assumir pra si, e só se:
-  // - está em espera OU já é dele
   if (!isAdmin) {
     if (toUserId && toUserId !== actor.id) {
       const e = new Error('Forbidden: cannot transfer ticket')
@@ -54,15 +52,21 @@ export async function assignTicket({ ticketId, actor, toUserId }) {
 export async function closeTicket({ ticketId, actor }) {
   const ticket = await getTicket(ticketId)
   const isAdmin = actor.role === 'ADMIN'
+
   if (!isAdmin && ticket.assignedToId !== actor.id) {
     const e = new Error('Forbidden')
     e.statusCode = 403
     throw e
   }
+
   return repo.closeTicket(ticketId)
 }
 
 export async function sendMessage({ ticketId, actor, text }) {
+  
+
+
+
   if (!text || !text.trim()) {
     const e = new Error('Text is required')
     e.statusCode = 400
@@ -72,44 +76,69 @@ export async function sendMessage({ ticketId, actor, text }) {
   const ticket = await getTicket(ticketId)
   const isAdmin = actor.role === 'ADMIN'
 
-  // atendente comum precisa ser o responsável
   if (!isAdmin && ticket.assignedToId !== actor.id) {
     const e = new Error('Forbidden: you are not assigned to this ticket')
     e.statusCode = 403
     throw e
   }
 
-  // regra 24h: por enquanto, bloqueia fora da janela (depois implementamos template)
   if (!isWithinWindow(ticket.waWindowUntil)) {
     const e = new Error('WhatsApp 24h window expired: template required')
     e.statusCode = 409
     throw e
   }
 
-  // enviar via Meta
-  const toWaId = ticket.contact.waId
-  const { messageId } = await sendTextMessage({ toWaId, text: text.trim() })
+  const dbUser = actor?.id
+  ? await prisma.user.findUnique({
+      where: { id: actor.id },
+      select: { id: true, name: true, role: true },
+    })
+  : null
 
-  // salvar OUT
+  let senderUserId = dbUser?.id ?? null
+  let senderName = dbUser?.name ?? 'Atendente'
+
+  if (actor?.id) {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: actor.id },
+      select: { id: true, name: true },
+    })
+
+    if (dbUser) {
+      senderUserId = dbUser.id
+      senderName = dbUser.name ?? senderName
+    }
+  }
+
+  const toWaId = ticket.contact.waId
+  const { messageId } = await sendTextMessage({
+    toWaId,
+    text: text.trim(),
+  })
+
   const msg = await repo.createOutboundMessage({
-  ticketId,
-  text: text.trim(),
-  providerMessageId: messageId,
-  status: 'SENT',
-  senderType: 'AGENT',
-  senderUserId: actor.id,
-  senderName: actor.name,
-}) 
+    ticketId,
+    text: text.trim(),
+    providerMessageId: messageId,
+    status: 'SENT',
+    senderType: 'AGENT',
+    senderUserId,
+    senderName,
+  })
 
   await repo.bumpTicketLastMessage(ticketId)
 
   await prisma.ticket.update({
-  where: { id: ticketId },
-  data: {
-    lastOutboundById: actor.id,
-    ...(ticket.assignedToId ? {} : { assignedToId: actor.id, claimedAt: new Date() }),
-  },
-})
+    where: { id: ticketId },
+    data: {
+      lastOutboundById: senderUserId,
+      ...(ticket.assignedToId
+        ? {}
+        : senderUserId
+          ? { assignedToId: senderUserId, claimedAt: new Date() }
+          : {}),
+    },
+  })
 
   const updatedTicket = await prisma.ticket.findUnique({
     where: { id: ticketId },
@@ -127,6 +156,7 @@ export async function sendMessage({ ticketId, actor, text }) {
 
   return msg
 }
+
 export async function createVoiceOutMessage({
   ticketId,
   userId,
@@ -136,6 +166,21 @@ export async function createVoiceOutMessage({
   sizeBytes,
   durationMs,
 }) {
+  let senderUserId = null
+  let senderName = userName ?? 'Atendente'
+
+  if (userId) {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true },
+    })
+
+    if (dbUser) {
+      senderUserId = dbUser.id
+      senderName = dbUser.name ?? senderName
+    }
+  }
+
   const message = await prisma.message.create({
     data: {
       ticketId,
@@ -146,8 +191,8 @@ export async function createVoiceOutMessage({
       sizeBytes,
       durationMs,
       senderType: 'AGENT',
-      senderUserId: userId ?? null,
-      senderName: userName ?? null,
+      senderUserId,
+      senderName,
       status: 'SENT',
     },
   })
@@ -158,4 +203,21 @@ export async function createVoiceOutMessage({
   })
 
   return message
+}
+
+export async function listAgents() {
+  return prisma.user.findMany({
+    where: {
+      isActive: true,
+      isChatAgent: true,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+    orderBy: {
+      name: 'asc',
+    },
+  })
 }

@@ -1,18 +1,15 @@
 // src/modules/whatsapp/whatsapp.mapper.js
 
 // Retorna lista de eventos normalizados:
-// - inbound_message: mensagem recebida
-// - message_status: status update (delivered/read/failed/sent)
-/**
- * Converte payload da Meta em uma lista simples de eventos.
- * Inicial: foca em messages IN (text).
- */
+// - mensagens inbound
+// - status updates (quando você quiser tratar depois)
 export function parseWebhookEvents(payload) {
   const out = []
 
   const entries = Array.isArray(payload?.entry) ? payload.entry : []
   for (const entry of entries) {
     const changes = Array.isArray(entry?.changes) ? entry.changes : []
+
     for (const change of changes) {
       const value = change?.value
       if (!value) continue
@@ -20,7 +17,6 @@ export function parseWebhookEvents(payload) {
       const messages = Array.isArray(value?.messages) ? value.messages : []
       const contacts = Array.isArray(value?.contacts) ? value.contacts : []
 
-      // map: wa_id -> profile name
       const contactByWaId = new Map()
       for (const c of contacts) {
         const waId = c?.wa_id ? String(c.wa_id) : null
@@ -37,15 +33,33 @@ export function parseWebhookEvents(payload) {
 
         let type = 'UNKNOWN'
         let text = null
+        let mediaId = null
+        let mimeType = null
 
         if (m?.text?.body) {
           type = 'TEXT'
           text = String(m.text.body)
-        } else if (m?.image) type = 'IMAGE'
-        else if (m?.audio) type = 'AUDIO'
-        else if (m?.document) type = 'DOCUMENT'
-        else if (m?.video) type = 'VIDEO'
-        else if (m?.sticker) type = 'STICKER'
+        } else if (m?.image) {
+          type = 'IMAGE'
+          mediaId = m.image?.id ? String(m.image.id) : null
+          mimeType = m.image?.mime_type || null
+        } else if (m?.audio) {
+          type = 'AUDIO'
+          mediaId = m.audio?.id ? String(m.audio.id) : null
+          mimeType = m.audio?.mime_type || null
+        } else if (m?.document) {
+          type = 'DOCUMENT'
+          mediaId = m.document?.id ? String(m.document.id) : null
+          mimeType = m.document?.mime_type || null
+        } else if (m?.video) {
+          type = 'VIDEO'
+          mediaId = m.video?.id ? String(m.video.id) : null
+          mimeType = m.video?.mime_type || null
+        } else if (m?.sticker) {
+          type = 'STICKER'
+          mediaId = m.sticker?.id ? String(m.sticker.id) : null
+          mimeType = m.sticker?.mime_type || null
+        }
 
         const contact = contactByWaId.get(from) || { waId: from, name: null }
 
@@ -54,11 +68,29 @@ export function parseWebhookEvents(payload) {
           providerMessageId: id,
           fromWaId: from,
           contactName: contact.name,
-          timestamp: timestamp ? new Date(timestamp * 1000).toISOString() : new Date().toISOString(),
+          timestamp: timestamp ? new Date(timestamp * 1000) : new Date(),
           direction: 'IN',
           type,
           text,
-          raw: m, // útil pra debug
+          mediaId,
+          mimeType,
+          raw: m,
+        })
+      }
+
+      const statuses = Array.isArray(value?.statuses) ? value.statuses : []
+      for (const s of statuses) {
+        const providerMessageId = s?.id ? String(s.id) : null
+        const status = s?.status ? String(s.status).toUpperCase() : null
+
+        if (!providerMessageId || !status) continue
+
+        out.push({
+          provider: 'meta',
+          event: 'message_status',
+          providerMessageId,
+          status,
+          raw: s,
         })
       }
     }

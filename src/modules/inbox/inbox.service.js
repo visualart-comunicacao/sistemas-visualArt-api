@@ -1,7 +1,46 @@
 import * as repo from './inbox.repository.js'
-import { sendTextMessage } from '../whatsapp/whatsapp.service.js'
+import path from 'path'
+import {
+  sendTextMessage,
+  uploadMedia,
+  sendAudioMessage,
+  bumpTicketWindow,
+  storeOutboundMessageFailed,
+  markTicketLastOutboundBy,
+} from '../whatsapp/whatsapp.service.js'
 import { bus } from '../../realtime/bus.js'
 import { prisma } from '../../db/prisma.js'
+
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import fs from 'node:fs'
+
+const execFileAsync = promisify(execFile)
+
+async function convertWebmToOggOpus(inputPath) {
+  const dir = path.dirname(inputPath)
+  const base = path.basename(inputPath, path.extname(inputPath))
+  const outputPath = path.join(dir, `${base}.ogg`)
+
+  await execFileAsync('ffmpeg', [
+    '-y',
+    '-i',
+    inputPath,
+    '-c:a',
+    'libopus',
+    '-b:a',
+    '32k',
+    '-vbr',
+    'on',
+    outputPath,
+  ])
+
+  if (!fs.existsSync(outputPath)) {
+    throw new Error('Falha ao converter áudio para OGG')
+  }
+
+  return outputPath
+}
 
 function isWithinWindow(waWindowUntil) {
   if (!waWindowUntil) return false
@@ -63,10 +102,6 @@ export async function closeTicket({ ticketId, actor }) {
 }
 
 export async function sendMessage({ ticketId, actor, text }) {
-  
-
-
-
   if (!text || !text.trim()) {
     const e = new Error('Text is required')
     e.statusCode = 400
@@ -89,24 +124,24 @@ export async function sendMessage({ ticketId, actor, text }) {
   }
 
   const dbUser = actor?.id
-  ? await prisma.user.findUnique({
-      where: { id: actor.id },
-      select: { id: true, name: true, role: true },
-    })
-  : null
+    ? await prisma.user.findUnique({
+        where: { id: actor.id },
+        select: { id: true, name: true, role: true },
+      })
+    : null
 
   let senderUserId = dbUser?.id ?? null
   let senderName = dbUser?.name ?? 'Atendente'
 
   if (actor?.id) {
-    const dbUser = await prisma.user.findUnique({
+    const dbUser2 = await prisma.user.findUnique({
       where: { id: actor.id },
       select: { id: true, name: true },
     })
 
-    if (dbUser) {
-      senderUserId = dbUser.id
-      senderName = dbUser.name ?? senderName
+    if (dbUser2) {
+      senderUserId = dbUser2.id
+      senderName = dbUser2.name ?? senderName
     }
   }
 
@@ -166,6 +201,23 @@ export async function createVoiceOutMessage({
   sizeBytes,
   durationMs,
 }) {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    include: { contact: true },
+  })
+
+  if (!ticket) {
+    const e = new Error('Ticket not found')
+    e.statusCode = 404
+    throw e
+  }
+
+  if (!ticket.contact?.waId) {
+    const e = new Error('Contato do ticket não possui waId')
+    e.statusCode = 400
+    throw e
+  }
+
   let senderUserId = null
   let senderName = userName ?? 'Atendente'
 
@@ -181,28 +233,101 @@ export async function createVoiceOutMessage({
     }
   }
 
-  const message = await prisma.message.create({
-    data: {
+  const filePath = path.join(process.cwd(), mediaUrl.replace(/^\/+/, ''))
+  const fileName = path.basename(filePath)
+
+  let uploadPath = filePath
+  let uploadMimeType = mimeType
+  let uploadFileName = fileName
+
+  if (mimeType === 'audio/webm') {
+    const convertedPath = await convertWebmToOggOpus(filePath)
+    uploadPath = convertedPath
+    uploadMimeType = 'audio/ogg'
+    uploadFileName = path.basename(convertedPath)
+  }
+
+  try {
+    const { mediaId } = await uploadMedia({
+      filePath: uploadPath,
+      mimeType: uploadMimeType,
+      fileName: uploadFileName,
+    })
+
+    if (!mediaId) {
+      throw new Error('Falha ao obter mediaId do WhatsApp')
+    }
+
+    const { messageId } = await sendAudioMessage({
+      toWaId: ticket.contact.waId,
+      mediaId,
+    })
+
+    const message = await prisma.message.create({
+      data: {
+        ticketId,
+        type: 'AUDIO',
+        direction: 'OUT',
+        mediaUrl,
+        mimeType,
+        sizeBytes,
+        durationMs,
+        providerMessageId: messageId,
+        status: 'SENT',
+        senderType: 'AGENT',
+        senderUserId,
+        senderName,
+      },
+    })
+
+    await repo.bumpTicketLastMessage(ticketId)
+    await bumpTicketWindow(ticketId)
+    await markTicketLastOutboundBy(ticketId, senderUserId ? { id: senderUserId } : null)
+
+    const updatedTicket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        contact: true,
+        assignedTo: { select: { id: true, name: true, role: true } },
+      },
+    })
+
+    bus.emit('message.created', {
+      source: 'inbox.voice',
+      ticket: updatedTicket,
+      message,
+    })
+
+    return message
+  } catch (err) {
+    const failed = await storeOutboundMessageFailed({
       ticketId,
       type: 'AUDIO',
-      direction: 'OUT',
+      text: null,
       mediaUrl,
       mimeType,
-      sizeBytes,
-      durationMs,
+      createdAt: new Date(),
       senderType: 'AGENT',
       senderUserId,
       senderName,
-      status: 'SENT',
-    },
-  })
+    })
 
-  bus.emit('message.created', {
-    ticketId,
-    message,
-  })
+    const updatedTicket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        contact: true,
+        assignedTo: { select: { id: true, name: true, role: true } },
+      },
+    })
 
-  return message
+    bus.emit('message.created', {
+      source: 'inbox.voice.failed',
+      ticket: updatedTicket,
+      message: failed,
+    })
+
+    throw err
+  }
 }
 
 export async function listAgents() {

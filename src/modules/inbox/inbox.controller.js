@@ -18,23 +18,29 @@ export const sendVoiceMessage = [
   uploadVoice.single('file'),
   async (req, res, next) => {
     try {
+      console.log('entrei no controller de voz')
+      console.log('req.params =', req.params)
+      console.log('req.user =', req.user)
+      console.log('req.file =', req.file)
+      console.log('req.body =', req.body)
+
       const { ticketId } = req.params
-      const userId = req.user?.id // conforme seu authRequired
+      const userId = req.user?.id
       const file = req.file
 
       if (!file) {
         return res.status(400).json({ message: 'Arquivo de áudio não enviado (field: file).' })
       }
 
-      // URL pública do seu servidor
       const mediaUrl = `/uploads/voices/${file.filename}`
 
-      // durationMs: por enquanto pode vir do front (mais confiável no “agora”)
       const durationMs = Number.isFinite(Number(req.body?.durationMs))
         ? Number(req.body.durationMs)
-        : null
+        : Number.isFinite(Number(req.body?.durationSec))
+          ? Number(req.body.durationSec) * 1000
+          : null
 
-      const msg = await service.createVoiceOutMessage({
+      const payload = {
         ticketId,
         userId,
         userName: req.user?.name ?? null,
@@ -42,10 +48,17 @@ export const sendVoiceMessage = [
         mimeType: file.mimetype,
         sizeBytes: file.size,
         durationMs,
-      })
+      }
+
+      console.log('payload createVoiceOutMessage =', payload)
+
+      const msg = await service.createVoiceOutMessage(payload)
+
+      console.log('msg criada =', msg)
 
       return res.status(201).json(msg)
     } catch (err) {
+      console.log('Error in sendVoiceMessage:', err)
       next(err)
     }
   }

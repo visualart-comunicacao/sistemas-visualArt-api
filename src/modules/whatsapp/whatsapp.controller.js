@@ -5,33 +5,33 @@ import {
   upsertContactFromInbound,
   findOrCreateOpenTicket,
   storeOutboundMessageSent,
+  storeInboundMessage,
   bumpTicketWindow,
   sendTextMessage,
   getMediaUrl,
-  updateMessageStatus,
+  downloadMediaBuffer,
+  saveInboundAudioFile,
   markTicketLastOutboundBy,
-  sendTemplateMessage
+  sendTemplateMessage,
 } from './whatsapp.service.js'
 import { ingestIncomingText } from './whatsapp.inbox.service.js'
+import { bus } from '../../realtime/bus.js'
+import { prisma } from '../../db/prisma.js'
 
 export async function postSendTextByPhone(req, res, next) {
   try {
-    const { toWaId, text, name } = req.body;
+    const { toWaId, text, name } = req.body
 
-    // 1) garante Contact (mesmo se nunca falou antes)
     const contact = await upsertContactFromInbound({
       waId: toWaId,
       name: name ?? null,
       phoneE164: toWaId,
-    });
+    })
 
-    // 2) garante Ticket OPEN
-    const ticket = await findOrCreateOpenTicket(contact.id);
+    const ticket = await findOrCreateOpenTicket(contact.id)
 
-    // 3) envia via Meta
-    const { messageId, raw } = await sendTextMessage({ toWaId, text });
+    const { messageId, raw } = await sendTextMessage({ toWaId, text })
 
-    // 4) salva OUT
     const currentUser = req.user || req.authUser || null
 
     const msg = await storeOutboundMessageSent({
@@ -48,10 +48,9 @@ export async function postSendTextByPhone(req, res, next) {
     })
 
     if (currentUser?.id) {
-  await markTicketLastOutboundBy(ticket.id, currentUser)
-}
+      await markTicketLastOutboundBy(ticket.id, currentUser)
+    }
 
-    // 5) atualiza janela
     await bumpTicketWindow(ticket.id)
 
     return res.json({
@@ -61,14 +60,13 @@ export async function postSendTextByPhone(req, res, next) {
       messageId,
       message: msg,
       raw,
-    });
+    })
   } catch (err) {
-    return next(err);
+    return next(err)
   }
 }
 
 export async function postWebhook(req, res, next) {
-  // responda rápido pra Meta não ficar retentando
   res.sendStatus(200)
 
   try {
@@ -82,25 +80,80 @@ export async function postWebhook(req, res, next) {
 
     const events = parseWebhookEvents(payload)
 
-    // ✅ aqui você pode chamar seu service que salva no banco
-    // por enquanto, só loga pra garantir que parou o 500
     for (const ev of events) {
-  // só texto IN por enquanto
-  if (ev.direction !== 'IN') continue
-  if (ev.type !== 'TEXT') continue
+      if (ev.direction !== 'IN') continue
 
-  await ingestIncomingText({
-    fromWaId: ev.fromWaId,
-    providerMessageId: ev.providerMessageId,
-    contactName: ev.contactName,
-    text: ev.text,
-    createdAt: ev.timestamp,
-  })
-}
+      // TEXTO
+      if (ev.type === 'TEXT') {
+        await ingestIncomingText({
+          fromWaId: ev.fromWaId,
+          providerMessageId: ev.providerMessageId,
+          contactName: ev.contactName,
+          text: ev.text,
+          createdAt: ev.timestamp,
+        })
+
+        continue
+      }
+
+      // ÁUDIO
+      if (ev.type === 'AUDIO') {
+        const contact = await upsertContactFromInbound({
+          waId: ev.fromWaId,
+          name: ev.contactName ?? null,
+          phoneE164: ev.fromWaId,
+        })
+
+        const ticket = await findOrCreateOpenTicket(contact.id)
+
+        const mediaUrlFromMeta = await getMediaUrl(ev.mediaId)
+        if (!mediaUrlFromMeta) {
+          console.warn('[WA WEBHOOK] não foi possível obter URL da mídia', {
+            mediaId: ev.mediaId,
+            providerMessageId: ev.providerMessageId,
+          })
+          continue
+        }
+
+        const buffer = await downloadMediaBuffer(mediaUrlFromMeta)
+
+        const saved = await saveInboundAudioFile({
+          buffer,
+          mimeType: ev.mimeType || 'audio/ogg',
+        })
+
+        const inboundMessage = await storeInboundMessage({
+          ticketId: ticket.id,
+          providerMessageId: ev.providerMessageId,
+          type: 'AUDIO',
+          text: null,
+          mediaUrl: saved.mediaUrl,
+          mimeType: ev.mimeType || 'audio/ogg',
+          createdAt: ev.timestamp || new Date(),
+        })
+
+        await bumpTicketWindow(ticket.id)
+
+        const updatedTicket = await prisma.ticket.findUnique({
+          where: { id: ticket.id },
+          include: {
+            contact: true,
+            assignedTo: { select: { id: true, name: true, role: true } },
+          },
+        })
+
+        bus.emit('message.created', {
+          source: 'whatsapp.inbound.audio',
+          ticket: updatedTicket,
+          message: inboundMessage,
+        })
+
+        continue
+      }
+    }
   } catch (err) {
     console.error('[WA WEBHOOK] postWebhook error:', err?.message || err)
     console.error(err)
-    // como já respondemos 200, só loga
     return
   }
 }
@@ -114,7 +167,6 @@ export async function postSendText(req, res, next) {
 
     const { contactId, toWaId, text } = v.data
 
-    // 1) ticket
     const ticket = await findOrCreateOpenTicket(contactId)
     const { messageId } = await sendTextMessage({ toWaId, text })
 
@@ -143,17 +195,14 @@ export async function postSendTemplateByPhone(req, res, next) {
   try {
     const { toWaId, templateName = 'hello_world', languageCode = 'en_US', components, name } = req.body
 
-    // 1) garante Contact
     const contact = await upsertContactFromInbound({
       waId: toWaId,
       name: name ?? null,
       phoneE164: toWaId,
     })
 
-    // 2) garante Ticket OPEN
     const ticket = await findOrCreateOpenTicket(contact.id)
 
-    // 3) envia template via Meta
     const { messageId, raw } = await sendTemplateMessage({
       toWaId,
       templateName,
@@ -161,27 +210,25 @@ export async function postSendTemplateByPhone(req, res, next) {
       components,
     })
 
-    // 4) salva OUT
     const currentUser = req.user || req.authUser || null
 
-const msg = await storeOutboundMessageSent({
-  ticketId: ticket.id,
-  providerMessageId: messageId,
-  type: 'TEXT',
-  text: `[TEMPLATE:${templateName}]`,
-  mediaUrl: null,
-  mimeType: null,
-  createdAt: new Date(),
-  senderType: 'AGENT',
-  senderUserId: currentUser?.id ?? null,
-  senderName: currentUser?.name ?? null,
-})
+    const msg = await storeOutboundMessageSent({
+      ticketId: ticket.id,
+      providerMessageId: messageId,
+      type: 'TEXT',
+      text: `[TEMPLATE:${templateName}]`,
+      mediaUrl: null,
+      mimeType: null,
+      createdAt: new Date(),
+      senderType: 'AGENT',
+      senderUserId: currentUser?.id ?? null,
+      senderName: currentUser?.name ?? null,
+    })
 
-if (currentUser?.id) {
-  await markTicketLastOutboundBy(ticket.id, currentUser)
-}
+    if (currentUser?.id) {
+      await markTicketLastOutboundBy(ticket.id, currentUser)
+    }
 
-    // 5) bump janela
     await bumpTicketWindow(ticket.id)
 
     return res.json({

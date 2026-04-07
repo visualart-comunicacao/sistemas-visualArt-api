@@ -2,6 +2,9 @@
 import { prisma } from '../../db/prisma.js'
 import fs from 'node:fs'
 import FormData from 'form-data'
+import axios from 'axios'
+
+import path from 'node:path'
 
 const GRAPH_BASE = 'https://graph.facebook.com'
 
@@ -220,6 +223,54 @@ export async function getMediaUrl(mediaId) {
   return data?.url ?? null
 }
 
+export async function downloadMediaBuffer(mediaUrl) {
+  if (!mediaUrl) return null
+
+  const accessToken = assertEnv('WHATSAPP_ACCESS_TOKEN')
+
+  const res = await fetch(mediaUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    const err = new Error(`WhatsApp media download failed: ${res.status} ${text}`.trim())
+    err.status = res.status
+    throw err
+  }
+
+  const arrayBuffer = await res.arrayBuffer()
+  return Buffer.from(arrayBuffer)
+}
+
+export async function saveInboundAudioFile({ buffer, mimeType }) {
+  if (!buffer) throw new Error('buffer é obrigatório para salvar áudio inbound')
+
+  const voicesDir = path.join(process.cwd(), 'uploads', 'voices')
+  fs.mkdirSync(voicesDir, { recursive: true })
+
+  let ext = '.ogg'
+
+  if (String(mimeType || '').includes('mpeg')) ext = '.mp3'
+  else if (String(mimeType || '').includes('mp4')) ext = '.m4a'
+  else if (String(mimeType || '').includes('aac')) ext = '.aac'
+  else if (String(mimeType || '').includes('amr')) ext = '.amr'
+  else if (String(mimeType || '').includes('ogg')) ext = '.ogg'
+  else if (String(mimeType || '').includes('opus')) ext = '.ogg'
+
+  const filename = `${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`
+  const filePath = path.join(voicesDir, filename)
+
+  fs.writeFileSync(filePath, buffer)
+
+  return {
+    filePath,
+    mediaUrl: `/uploads/voices/${filename}`,
+  }
+}
+
 export async function sendTemplateMessage({ toWaId, templateName, languageCode = 'en_US', components }) {
   const accessToken = assertEnv('WHATSAPP_ACCESS_TOKEN')
   const phoneNumberId = assertEnv('WHATSAPP_PHONE_NUMBER_ID')
@@ -273,32 +324,34 @@ export async function uploadMedia({ filePath, mimeType, fileName }) {
   const form = new FormData()
   form.append('messaging_product', 'whatsapp')
   form.append('file', fs.createReadStream(filePath), {
-    filename: fileName || 'audio',
-    contentType: mimeType,
+    filename: fileName || 'audio.webm',
+    contentType: mimeType || 'audio/webm',
   })
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      ...form.getHeaders(),
-    },
-    body: form,
-  })
+  try {
+    const { data } = await axios.post(url, form, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...form.getHeaders(),
+      },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
+    })
 
-  const data = await res.json().catch(() => ({}))
-
-  if (!res.ok) {
-    const msg = data?.error?.message || 'WhatsApp media upload failed'
-    const err = new Error(msg)
-    err.status = res.status === 401 || res.status === 403 ? 502 : res.status
-    err.details = data?.error || data
-    throw err
-  }
-
-  return {
-    mediaId: data?.id ?? null,
-    raw: data,
+    return {
+      mediaId: data?.id ?? null,
+      raw: data,
+    }
+  } catch (err) {
+    const data = err?.response?.data || {}
+    const msg = data?.error?.message || err.message || 'WhatsApp media upload failed'
+    const e = new Error(msg)
+    e.status =
+      err?.response?.status === 401 || err?.response?.status === 403
+        ? 502
+        : err?.response?.status || 500
+    e.details = data?.error || data
+    throw e
   }
 }
 

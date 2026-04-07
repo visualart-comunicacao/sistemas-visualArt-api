@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+.yarn
+.git
+.gitignore
+.env
+uploads
+coverage
+dist
+.tmp
